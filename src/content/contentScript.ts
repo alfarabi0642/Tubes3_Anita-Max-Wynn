@@ -4,13 +4,15 @@ import {
   MESSAGE_TYPES,
   type JudolMessage,
   type JudolMessageResponse,
+  type BlurModeResponse,
   type ScanRecord
 } from "../shared/messages";
-import { saveScanRecord } from "../shared/storage";
+import { saveScanRecord, saveBlurMode, loadBlurMode } from "../shared/storage";
 import { scanPageText } from "./domScanner";
 import { cleanupHighlights, applyHighlights } from "./highlighter";
 import { createDebouncedRescan } from "./rescan";
 import { isExtensionElement } from "./textNodeWalker";
+import { setBlurEnabled, refreshBlur, isBlurEnabled } from "./blurManager";
 
 const RESCAN_DEBOUNCE_MS = 450;
 
@@ -90,6 +92,8 @@ async function performPageScan(): Promise<ScanRecord> {
       applyHighlights(result.node, result.matches, pageScan.summary);
     }
 
+    refreshBlur();
+
     const record = createRecord(pageScan.summary);
     currentRecord = record;
     await saveScanRecord(record);
@@ -116,11 +120,14 @@ const scheduleRescan = createDebouncedRescan(() => {
   void runPageScan();
 }, RESCAN_DEBOUNCE_MS);
 
-function sendResponseSafely(sendResponse: (response: JudolMessageResponse) => void, response: JudolMessageResponse): void {
+function sendResponseSafely(
+  sendResponse: (response: JudolMessageResponse | BlurModeResponse) => void,
+  response: JudolMessageResponse | BlurModeResponse
+): void {
   try {
     sendResponse(response);
   } catch {
-    // Popup may close before an async scan finishes.
+
   }
 }
 
@@ -154,16 +161,36 @@ chrome.runtime.onMessage.addListener((message: JudolMessage, _sender, sendRespon
     return true;
   }
 
+  if (message.type === MESSAGE_TYPES.setBlurMode) {
+    const enabled = message.enabled;
+    setBlurEnabled(enabled);
+    saveBlurMode(enabled).catch(() => { });
+    sendResponseSafely(sendResponse, { ok: true, enabled });
+    return false;
+  }
+
+  if (message.type === MESSAGE_TYPES.getBlurMode) {
+    sendResponseSafely(sendResponse, { ok: true, enabled: isBlurEnabled() });
+    return false;
+  }
+
   return false;
 });
 
-function initialize(): void {
+async function initialize(): Promise<void> {
+  try {
+    const saved = await loadBlurMode();
+    setBlurEnabled(saved);
+  } catch {
+    
+  }
+
   observePage();
   void runPageScan();
 }
 
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", initialize, { once: true });
+  document.addEventListener("DOMContentLoaded", () => { void initialize(); }, { once: true });
 } else {
-  initialize();
+  void initialize();
 }
