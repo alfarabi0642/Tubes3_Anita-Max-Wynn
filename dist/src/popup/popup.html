@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Judol Detector</title>
+    <title>Judol Detector</title>
     <script type="module" crossorigin src="../../assets/popup.js"></script>
     <link rel="stylesheet" crossorigin href="../../assets/popup.css">
   </head>
@@ -40,7 +40,24 @@
         <h2 id="algorithmHeading">Algorithm Stats</h2>
         <div id="algorithmList" class="algorithm-list"></div>
       </section>
-    </main>
 
+      <section class="panel panel--blur" aria-labelledby="blurHeading">
+        <h2 id="blurHeading">Censorship</h2>
+        <div class="blur-row">
+          <div class="blur-description">
+            <strong>Blur Detected Content</strong>
+            <p>Automatically blurs page elements that contain gambling keywords.</p>
+          </div>
+          <label class="blur-toggle-wrap" aria-label="Toggle blur mode">
+            <input id="blurToggle" type="checkbox" class="blur-checkbox" />
+            <span class="blur-track">
+              <span class="blur-thumb"></span>
+            </span>
+          </label>
+        </div>
+        <span id="blurLabel" class="blur-status blur-status--off">Blur OFF</span>
+      </section>
+    </main>
+
   </body>
 </html>

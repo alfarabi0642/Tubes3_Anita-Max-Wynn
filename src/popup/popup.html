@@ -39,6 +39,23 @@
         <h2 id="algorithmHeading">Algorithm Stats</h2>
         <div id="algorithmList" class="algorithm-list"></div>
       </section>
+
+      <section class="panel panel--blur" aria-labelledby="blurHeading">
+        <h2 id="blurHeading">Censorship</h2>
+        <div class="blur-row">
+          <div class="blur-description">
+            <strong>Blur Detected Content</strong>
+            <p>Automatically blurs page elements that contain gambling keywords.</p>
+          </div>
+          <label class="blur-toggle-wrap" aria-label="Toggle blur mode">
+            <input id="blurToggle" type="checkbox" class="blur-checkbox" />
+            <span class="blur-track">
+              <span class="blur-thumb"></span>
+            </span>
+          </label>
+        </div>
+        <span id="blurLabel" class="blur-status blur-status--off">Blur OFF</span>
+      </section>
     </main>
 
     <script type="module" src="./popup.ts"></script>

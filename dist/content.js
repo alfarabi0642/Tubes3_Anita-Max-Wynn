@@ -9,10 +9,13 @@
     "KMP",
     "Boyer-Moore",
     "RegEx",
-    "Weighted-Levenshtein"
+    "Weighted-Levenshtein",
+    "Aho-Corasick",
+    "Rabin-Karp"
   ];
   const DEFAULT_KEYWORDS = ["GACOR99", "MAXWIN88", "HOKI88", "SLOT99"];
   const DEFAULT_KEYWORD_PATH = "keywords/keywords.txt";
+  const BLUR_MODE_STORAGE_KEY = "judol-detector:blur-mode";
   const VISUAL_CHARACTER_MAP = {
     "0": "O",
     "4": "A",
@@ -93,7 +96,9 @@
   const MESSAGE_TYPES = {
     getSummary: "JUDOL_GET_SUMMARY",
     rescan: "JUDOL_RESCAN",
-    scanUpdated: "JUDOL_SCAN_UPDATED"
+    scanUpdated: "JUDOL_SCAN_UPDATED",
+    setBlurMode: "JUDOL_SET_BLUR_MODE",
+    getBlurMode: "JUDOL_GET_BLUR_MODE"
   };
   const LAST_SCAN_KEY = "judol-detector:last-scan";
   function ensureChromeStorage() {
@@ -111,6 +116,32 @@
           return;
         }
         resolve();
+      });
+    });
+  }
+  async function saveBlurMode(enabled) {
+    ensureChromeStorage();
+    await new Promise((resolve, reject) => {
+      chrome.storage.local.set({ [BLUR_MODE_STORAGE_KEY]: enabled }, () => {
+        const error = chrome.runtime.lastError;
+        if (error !== void 0) {
+          reject(new Error(error.message));
+          return;
+        }
+        resolve();
+      });
+    });
+  }
+  async function loadBlurMode() {
+    ensureChromeStorage();
+    return new Promise((resolve, reject) => {
+      chrome.storage.local.get(BLUR_MODE_STORAGE_KEY, (items) => {
+        const error = chrome.runtime.lastError;
+        if (error !== void 0) {
+          reject(new Error(error.message));
+          return;
+        }
+        resolve(items[BLUR_MODE_STORAGE_KEY] ?? false);
       });
     });
   }
@@ -360,6 +391,177 @@
     }
     return { matches, comparisons };
   }
+  function makeNode() {
+    return { goto: /* @__PURE__ */ new Map(), failure: 0, output: [] };
+  }
+  function buildAhoCorasick(keywords) {
+    const nodes = [makeNode()];
+    for (let ki = 0; ki < keywords.length; ki += 1) {
+      const normalizedKeyword = normalizeCase(keywords[ki]);
+      if (normalizedKeyword.length === 0) {
+        continue;
+      }
+      let current = 0;
+      for (let ci = 0; ci < normalizedKeyword.length; ci += 1) {
+        const char = normalizedKeyword[ci];
+        let next = nodes[current].goto.get(char);
+        if (next === void 0) {
+          next = nodes.length;
+          nodes.push(makeNode());
+          nodes[current].goto.set(char, next);
+        }
+        current = next;
+      }
+      nodes[current].output.push(normalizedKeyword);
+    }
+    const queue = [];
+    for (const child of nodes[0].goto.values()) {
+      nodes[child].failure = 0;
+      queue.push(child);
+    }
+    let head = 0;
+    while (head < queue.length) {
+      const current = queue[head];
+      head += 1;
+      for (const [char, child] of nodes[current].goto) {
+        let failureState = nodes[current].failure;
+        while (failureState !== 0 && !nodes[failureState].goto.has(char)) {
+          failureState = nodes[failureState].failure;
+        }
+        const nextFailure = nodes[failureState].goto.get(char);
+        nodes[child].failure = nextFailure !== void 0 && nextFailure !== child ? nextFailure : 0;
+        const failureNode = nodes[nodes[child].failure];
+        for (let oi = 0; oi < failureNode.output.length; oi += 1) {
+          nodes[child].output.push(failureNode.output[oi]);
+        }
+        queue.push(child);
+      }
+    }
+    return { nodes };
+  }
+  function searchAhoCorasick(text, automaton) {
+    const normalizedText = normalizeCase(text);
+    const { nodes } = automaton;
+    const matches = [];
+    let comparisons = 0;
+    let current = 0;
+    for (let ti = 0; ti < normalizedText.length; ti += 1) {
+      const char = normalizedText[ti];
+      while (current !== 0 && !nodes[current].goto.has(char)) {
+        comparisons += 1;
+        current = nodes[current].failure;
+      }
+      const next = nodes[current].goto.get(char);
+      comparisons += 1;
+      if (next !== void 0) {
+        current = next;
+      }
+      const output = nodes[current].output;
+      for (let oi = 0; oi < output.length; oi += 1) {
+        const keyword = output[oi];
+        const start = ti - keyword.length + 1;
+        const end = ti + 1;
+        matches.push({
+          keyword,
+          matchedText: text.slice(start, end),
+          algorithm: "Aho-Corasick",
+          start,
+          end,
+          comparisons
+        });
+      }
+    }
+    return { matches, comparisons };
+  }
+  const BASE = 131;
+  const MOD = 1000000007;
+  function mulMod(a, b) {
+    return (a * b % MOD + MOD) % MOD;
+  }
+  function addMod(a, b) {
+    return ((a + b) % MOD + MOD) % MOD;
+  }
+  function subMod(a, b) {
+    return ((a - b) % MOD + MOD) % MOD;
+  }
+  function power(base, exp) {
+    let result = 1;
+    let current = base % MOD;
+    let remaining = exp;
+    while (remaining > 0) {
+      if (remaining % 2 === 1) {
+        result = mulMod(result, current);
+      }
+      current = mulMod(current, current);
+      remaining = Math.floor(remaining / 2);
+    }
+    return result;
+  }
+  function searchSinglePattern(normalizedText, originalText, normalizedPattern) {
+    const matches = [];
+    let comparisons = 0;
+    const n = normalizedText.length;
+    const m = normalizedPattern.length;
+    if (m === 0 || n < m) {
+      return { matches, comparisons };
+    }
+    const highPower = power(BASE, m - 1);
+    let patternHash = 0;
+    let windowHash = 0;
+    for (let i = 0; i < m; i += 1) {
+      patternHash = addMod(mulMod(patternHash, BASE), normalizedPattern.charCodeAt(i));
+      windowHash = addMod(mulMod(windowHash, BASE), normalizedText.charCodeAt(i));
+    }
+    for (let start = 0; start <= n - m; start += 1) {
+      comparisons += 1;
+      if (windowHash === patternHash) {
+        let matched = true;
+        for (let k = 0; k < m; k += 1) {
+          comparisons += 1;
+          if (normalizedText[start + k] !== normalizedPattern[k]) {
+            matched = false;
+            break;
+          }
+        }
+        if (matched) {
+          matches.push({
+            keyword: normalizedPattern,
+            matchedText: originalText.slice(start, start + m),
+            algorithm: "Rabin-Karp",
+            start,
+            end: start + m,
+            comparisons
+          });
+        }
+      }
+      if (start < n - m) {
+        const outChar = normalizedText.charCodeAt(start);
+        const inChar = normalizedText.charCodeAt(start + m);
+        windowHash = addMod(
+          mulMod(subMod(windowHash, mulMod(outChar, highPower)), BASE),
+          inChar
+        );
+      }
+    }
+    return { matches, comparisons };
+  }
+  function searchRabinKarpAll(text, keywords) {
+    const normalizedText = normalizeCase(text);
+    const allMatches = [];
+    let totalComparisons = 0;
+    for (let ki = 0; ki < keywords.length; ki += 1) {
+      const normalizedKeyword = normalizeCase(keywords[ki]);
+      if (normalizedKeyword.length === 0) {
+        continue;
+      }
+      const result = searchSinglePattern(normalizedText, text, normalizedKeyword);
+      totalComparisons += result.comparisons;
+      for (let mi = 0; mi < result.matches.length; mi += 1) {
+        allMatches.push(result.matches[mi]);
+      }
+    }
+    return { matches: allMatches, comparisons: totalComparisons };
+  }
   function getNowMs() {
     if (typeof performance !== "undefined" && typeof performance.now === "function") {
       return performance.now();
@@ -507,6 +709,25 @@
       algorithmStats.push(createStats("Weighted-Levenshtein", fuzzyMatches.length, executionTimeMs, comparisons));
       for (let i = 0; i < fuzzyMatches.length; i += 1) {
         rawMatches.push(fuzzyMatches[i]);
+      }
+    }
+    if (isAlgorithmEnabled(activeAlgorithms, "Aho-Corasick")) {
+      const startedAt = getNowMs();
+      const automaton = buildAhoCorasick(keywords);
+      const runResult = searchAhoCorasick(text, automaton);
+      const executionTimeMs = getNowMs() - startedAt;
+      algorithmStats.push(createStats("Aho-Corasick", runResult.matches.length, executionTimeMs, runResult.comparisons));
+      for (let i = 0; i < runResult.matches.length; i += 1) {
+        rawMatches.push(runResult.matches[i]);
+      }
+    }
+    if (isAlgorithmEnabled(activeAlgorithms, "Rabin-Karp")) {
+      const startedAt = getNowMs();
+      const runResult = searchRabinKarpAll(text, keywords);
+      const executionTimeMs = getNowMs() - startedAt;
+      algorithmStats.push(createStats("Rabin-Karp", runResult.matches.length, executionTimeMs, runResult.comparisons));
+      for (let i = 0; i < runResult.matches.length; i += 1) {
+        rawMatches.push(runResult.matches[i]);
       }
     }
     const matches = deduplicateMatches(rawMatches);
@@ -674,25 +895,21 @@
     }
     return isInsideExtensionElement(target);
   }
-  function addNodeResult(results, visibleNode, summary) {
-    if (summary.matches.length === 0) {
-      return;
-    }
-    results.push({
-      node: visibleNode.node,
-      text: visibleNode.text,
-      matches: summary.matches
-    });
-  }
-  function scanPageText(keywords) {
+  function scanPageText(keywords, options = {}) {
     const visibleNodes = collectVisibleTextNodes();
     const summaries = [];
     const nodeResults = [];
     for (let i = 0; i < visibleNodes.length; i += 1) {
       const visibleNode = visibleNodes[i];
-      const summary = scanText(visibleNode.text, { keywords });
+      const summary = scanText(visibleNode.text, { ...options, keywords });
+      if (summary.matches.length > 0) {
+        nodeResults.push({
+          node: visibleNode.node,
+          text: visibleNode.text,
+          matches: summary.matches
+        });
+      }
       summaries.push(summary);
-      addNodeResult(nodeResults, visibleNode, summary);
     }
     return {
       summary: combineScanSummaries(summaries),
@@ -861,6 +1078,81 @@
       }, delayMs);
     };
   }
+  const BLUR_ATTR = "data-judol-blur";
+  const EXTENSION_ATTR = "data-judol-extension";
+  const BLUR_CLASS = "judol-detector-blur";
+  function getBlurTarget(element) {
+    const BLOCK_TAGS = /* @__PURE__ */ new Set([
+      "P",
+      "DIV",
+      "SECTION",
+      "ARTICLE",
+      "ASIDE",
+      "LI",
+      "TD",
+      "TH",
+      "BLOCKQUOTE",
+      "FIGCAPTION",
+      "HEADER",
+      "FOOTER",
+      "MAIN",
+      "NAV",
+      "H1",
+      "H2",
+      "H3",
+      "H4",
+      "H5",
+      "H6"
+    ]);
+    let current = element.parentElement;
+    while (current !== null && current !== document.body) {
+      if (BLOCK_TAGS.has(current.tagName)) {
+        return current;
+      }
+      current = current.parentElement;
+    }
+    return element.parentElement ?? element;
+  }
+  function applyBlurToHighlights() {
+    const highlights = document.querySelectorAll('[data-judol-highlight="true"]');
+    const alreadyBlurred = /* @__PURE__ */ new Set();
+    for (let i = 0; i < highlights.length; i += 1) {
+      const highlight = highlights[i];
+      const target = getBlurTarget(highlight);
+      if (alreadyBlurred.has(target)) {
+        continue;
+      }
+      target.classList.add(BLUR_CLASS);
+      target.setAttribute(BLUR_ATTR, "true");
+      target.setAttribute(EXTENSION_ATTR, "true");
+      alreadyBlurred.add(target);
+    }
+  }
+  function removeAllBlurs() {
+    const blurred = document.querySelectorAll(`[${BLUR_ATTR}="true"]`);
+    for (let i = 0; i < blurred.length; i += 1) {
+      blurred[i].classList.remove(BLUR_CLASS);
+      blurred[i].removeAttribute(BLUR_ATTR);
+    }
+  }
+  let blurEnabled = false;
+  function setBlurEnabled(enabled) {
+    blurEnabled = enabled;
+    if (enabled) {
+      applyBlurToHighlights();
+    } else {
+      removeAllBlurs();
+    }
+  }
+  function isBlurEnabled() {
+    return blurEnabled;
+  }
+  function refreshBlur() {
+    if (blurEnabled) {
+      removeAllBlurs();
+      applyBlurToHighlights();
+    }
+  }
   const RESCAN_DEBOUNCE_MS = 450;
   let cachedKeywords;
   let currentRecord;
@@ -923,6 +1215,7 @@
         const result = pageScan.nodeResults[i];
         applyHighlights(result.node, result.matches, pageScan.summary);
       }
+      refreshBlur();
       const record = createRecord(pageScan.summary);
       currentRecord = record;
       await saveScanRecord(record);
@@ -973,15 +1266,34 @@
       );
       return true;
     }
+    if (message.type === MESSAGE_TYPES.setBlurMode) {
+      const enabled = message.enabled;
+      setBlurEnabled(enabled);
+      saveBlurMode(enabled).catch(() => {
+      });
+      sendResponseSafely(sendResponse, { ok: true, enabled });
+      return false;
+    }
+    if (message.type === MESSAGE_TYPES.getBlurMode) {
+      sendResponseSafely(sendResponse, { ok: true, enabled: isBlurEnabled() });
+      return false;
+    }
     return false;
   });
-  function initialize() {
+  async function initialize() {
+    try {
+      const saved = await loadBlurMode();
+      setBlurEnabled(saved);
+    } catch {
+    }
     observePage();
     void runPageScan();
   }
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initialize, { once: true });
+    document.addEventListener("DOMContentLoaded", () => {
+      void initialize();
+    }, { once: true });
   } else {
-    initialize();
+    void initialize();
   }
 })();
