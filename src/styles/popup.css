@@ -246,3 +246,99 @@ h2 {
   font-size: 12px;
   line-height: 1.4;
 }
+
+.panel--blur {
+  gap: 10px;
+}
+
+.blur-row {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.blur-description {
+  display: grid;
+  gap: 3px;
+}
+
+.blur-description strong {
+  color: var(--navy);
+  font-size: 13px;
+}
+
+.blur-description p {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.blur-toggle-wrap {
+  cursor: pointer;
+  flex: 0 0 auto;
+  position: relative;
+}
+
+.blur-checkbox {
+  height: 1px;
+  opacity: 0;
+  position: absolute;
+  width: 1px;
+}
+
+.blur-track {
+  background: #cbd5e1;
+  border-radius: 999px;
+  display: block;
+  height: 24px;
+  position: relative;
+  transition: background 200ms ease;
+  width: 44px;
+}
+
+.blur-checkbox:checked + .blur-track {
+  background: var(--navy);
+}
+
+.blur-thumb {
+  background: #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  display: block;
+  height: 18px;
+  left: 3px;
+  position: absolute;
+  top: 3px;
+  transition: transform 200ms ease;
+  width: 18px;
+}
+
+.blur-checkbox:checked + .blur-track .blur-thumb {
+  transform: translateX(20px);
+}
+
+.blur-checkbox:focus-visible + .blur-track {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+.blur-status {
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 3px 8px;
+  text-transform: uppercase;
+  width: max-content;
+}
+
+.blur-status--on {
+  background: #fef9c3;
+  color: #92400e;
+}
+
+.blur-status--off {
+  background: #f1f5f9;
+  color: var(--muted);
+}

@@ -72,3 +72,21 @@
   font-weight: 650;
   overflow-wrap: anywhere;
 }
+
+
+.judol-detector-highlight--aho-corasick {
+  background: #f3d4ff;
+  border-bottom-color: #9333ea;
+}
+
+.judol-detector-highlight--rabin-karp {
+  background: #ffd6d6;
+  border-bottom-color: #dc2626;
+}
+
+.judol-detector-blur {
+  filter: blur(6px) !important;
+  pointer-events: none;
+  transition: filter 220ms ease;
+  user-select: none;
+}

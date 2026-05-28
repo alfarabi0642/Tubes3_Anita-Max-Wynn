@@ -3,6 +3,8 @@ import { searchKmp } from "./kmp";
 import { searchRegexPatterns } from "./regexMatcher";
 import type { AlgorithmName, AlgorithmStats, MatchResult, MatcherRunResult, ScanSummary } from "./types";
 import { searchWeightedLevenshtein } from "./weightedLevenshtein";
+import { buildAhoCorasick, searchAhoCorasick } from "./ahoCorasick";
+import { searchRabinKarpAll } from "./rabinKarp";
 import { ACTIVE_ALGORITHMS, DEFAULT_FUZZY_THRESHOLD, DEFAULT_KEYWORDS } from "../shared/config";
 import { normalizeKeywords, parseKeywordsFromText, loadKeywordsFromUrl } from "../shared/keywordLoader";
 import { normalizeCase } from "../shared/normalize";
@@ -214,6 +216,31 @@ export function scanText(text: string, options: ScanTextOptions = {}): ScanSumma
 
     for (let i = 0; i < fuzzyMatches.length; i += 1) {
       rawMatches.push(fuzzyMatches[i]);
+    }
+  }
+
+  if (isAlgorithmEnabled(activeAlgorithms, "Aho-Corasick")) {
+    const startedAt = getNowMs();
+    const automaton = buildAhoCorasick(keywords);
+    const runResult = searchAhoCorasick(text, automaton);
+    const executionTimeMs = getNowMs() - startedAt;
+
+    algorithmStats.push(createStats("Aho-Corasick", runResult.matches.length, executionTimeMs, runResult.comparisons));
+
+    for (let i = 0; i < runResult.matches.length; i += 1) {
+      rawMatches.push(runResult.matches[i]);
+    }
+  }
+
+  if (isAlgorithmEnabled(activeAlgorithms, "Rabin-Karp")) {
+    const startedAt = getNowMs();
+    const runResult = searchRabinKarpAll(text, keywords);
+    const executionTimeMs = getNowMs() - startedAt;
+
+    algorithmStats.push(createStats("Rabin-Karp", runResult.matches.length, executionTimeMs, runResult.comparisons));
+
+    for (let i = 0; i < runResult.matches.length; i += 1) {
+      rawMatches.push(runResult.matches[i]);
     }
   }
 

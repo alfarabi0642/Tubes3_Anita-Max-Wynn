@@ -3,6 +3,7 @@ import {
   MESSAGE_TYPES,
   type JudolMessage,
   type JudolMessageResponse,
+  type BlurModeResponse,
   type ScanRecord
 } from "../shared/messages";
 import { loadLastScanRecord } from "../shared/storage";
@@ -16,6 +17,8 @@ interface PopupElements {
   keywordChart: HTMLElement;
   algorithmList: HTMLElement;
   rescanButton: HTMLButtonElement;
+  blurToggle: HTMLInputElement;
+  blurLabel: HTMLElement;
 }
 
 function getElementById<T extends HTMLElement>(id: string): T {
@@ -29,13 +32,15 @@ function getElementById<T extends HTMLElement>(id: string): T {
 }
 
 const elements: PopupElements = {
-  totalMatches: getElementById("totalMatches"),
-  lastScanned: getElementById("lastScanned"),
-  pageTitle: getElementById("pageTitle"),
-  statusText: getElementById("statusText"),
-  keywordChart: getElementById("keywordChart"),
+  totalMatches:  getElementById("totalMatches"),
+  lastScanned:   getElementById("lastScanned"),
+  pageTitle:     getElementById("pageTitle"),
+  statusText:    getElementById("statusText"),
+  keywordChart:  getElementById("keywordChart"),
   algorithmList: getElementById("algorithmList"),
-  rescanButton: getElementById<HTMLButtonElement>("rescanButton")
+  rescanButton:  getElementById<HTMLButtonElement>("rescanButton"),
+  blurToggle:    getElementById<HTMLInputElement>("blurToggle"),
+  blurLabel:     getElementById("blurLabel")
 };
 
 function formatMs(value: number): string {
@@ -64,9 +69,12 @@ function getActiveTab(): Promise<chrome.tabs.Tab | undefined> {
   });
 }
 
-function sendTabMessage(tabId: number, message: JudolMessage): Promise<JudolMessageResponse> {
+function sendTabMessage(
+  tabId: number,
+  message: JudolMessage
+): Promise<JudolMessageResponse & BlurModeResponse> {
   return new Promise((resolve, reject) => {
-    chrome.tabs.sendMessage(tabId, message, (response: JudolMessageResponse | undefined) => {
+    chrome.tabs.sendMessage(tabId, message, (response: (JudolMessageResponse & BlurModeResponse) | undefined) => {
       const error = chrome.runtime.lastError;
 
       if (error !== undefined) {
@@ -90,10 +98,7 @@ function getKeywordItems(record: ScanRecord): ChartItem[] {
 
   for (let i = 0; i < keywords.length; i += 1) {
     const keyword = keywords[i];
-    items.push({
-      label: keyword,
-      value: record.summary.keywordCounts[keyword]
-    });
+    items.push({ label: keyword, value: record.summary.keywordCounts[keyword] });
   }
 
   return items;
@@ -133,18 +138,18 @@ function renderAlgorithmStats(stats: AlgorithmStats[]): void {
 
 function renderRecord(record: ScanRecord): void {
   elements.totalMatches.textContent = String(record.summary.totalMatches);
-  elements.lastScanned.textContent = formatTime(record.updatedAt);
-  elements.pageTitle.textContent = record.title.length === 0 ? record.url : record.title;
-  elements.statusText.textContent = "Scan summary is up to date.";
+  elements.lastScanned.textContent  = formatTime(record.updatedAt);
+  elements.pageTitle.textContent    = record.title.length === 0 ? record.url : record.title;
+  elements.statusText.textContent   = "Scan summary is up to date.";
   renderBarChart(elements.keywordChart, getKeywordItems(record));
   renderAlgorithmStats(record.summary.algorithmStats);
 }
 
 function renderError(message: string): void {
-  elements.statusText.textContent = message;
+  elements.statusText.textContent   = message;
   elements.totalMatches.textContent = "0";
-  elements.lastScanned.textContent = "-";
-  elements.pageTitle.textContent = "No active page summary.";
+  elements.lastScanned.textContent  = "-";
+  elements.pageTitle.textContent    = "No active page summary.";
   renderBarChart(elements.keywordChart, []);
   renderAlgorithmStats([]);
 }
@@ -196,7 +201,7 @@ async function requestRescan(): Promise<void> {
     return;
   }
 
-  elements.rescanButton.disabled = true;
+  elements.rescanButton.disabled  = true;
   elements.statusText.textContent = "Rescanning page.";
 
   try {
@@ -214,9 +219,45 @@ async function requestRescan(): Promise<void> {
   }
 }
 
-elements.rescanButton.addEventListener("click", () => {
-  void requestRescan();
-});
+function updateBlurLabel(enabled: boolean): void {
+  elements.blurLabel.textContent = enabled ? "Blur ON" : "Blur OFF";
+  elements.blurLabel.className   = enabled ? "blur-status blur-status--on" : "blur-status blur-status--off";
+}
+
+async function loadBlurState(): Promise<void> {
+  try {
+    const activeTab = await getActiveTab();
+
+    if (activeTab?.id === undefined) {
+      return;
+    }
+
+    const response = await sendTabMessage(activeTab.id, { type: MESSAGE_TYPES.getBlurMode });
+    elements.blurToggle.checked = response.enabled ?? false;
+    updateBlurLabel(response.enabled ?? false);
+  } catch {
+    updateBlurLabel(false);
+  }
+}
+
+async function handleBlurToggle(): Promise<void> {
+  const enabled   = elements.blurToggle.checked;
+  const activeTab = await getActiveTab();
+
+  updateBlurLabel(enabled);
+
+  if (activeTab?.id === undefined) {
+    return;
+  }
+
+  try {
+    await sendTabMessage(activeTab.id, { type: MESSAGE_TYPES.setBlurMode, enabled });
+  } catch {
+  }
+}
+
+elements.rescanButton.addEventListener("click", () => { void requestRescan(); });
+elements.blurToggle.addEventListener("change",  () => { void handleBlurToggle(); });
 
 chrome.runtime.onMessage.addListener((message: JudolMessage) => {
   if (message.type === MESSAGE_TYPES.scanUpdated) {
@@ -225,3 +266,4 @@ chrome.runtime.onMessage.addListener((message: JudolMessage) => {
 });
 
 void loadSummary();
+void loadBlurState();

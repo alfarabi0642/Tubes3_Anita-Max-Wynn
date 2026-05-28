@@ -10,8 +10,12 @@ export const ACTIVE_ALGORITHMS: AlgorithmName[] = [
   "KMP",
   "Boyer-Moore",
   "RegEx",
-  "Weighted-Levenshtein"
+  "Weighted-Levenshtein",
+  "Aho-Corasick",
+  "Rabin-Karp"
 ];
 
 export const DEFAULT_KEYWORDS = ["GACOR99", "MAXWIN88", "HOKI88", "SLOT99"];
 export const DEFAULT_KEYWORD_PATH = "keywords/keywords.txt";
+
+export const BLUR_MODE_STORAGE_KEY = "judol-detector:blur-mode";

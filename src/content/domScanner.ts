@@ -1,7 +1,7 @@
-import { scanText } from "../algorithms/matcherEngine";
+import { scanText, type ScanTextOptions } from "../algorithms/matcherEngine";
 import type { MatchResult, ScanSummary } from "../algorithms/types";
 import { combineScanSummaries } from "../shared/stats";
-import { collectVisibleTextNodes, type VisibleTextNode } from "./textNodeWalker";
+import { collectVisibleTextNodes } from "./textNodeWalker";
 
 export interface NodeScanResult {
   node: Text;
@@ -14,28 +14,27 @@ export interface PageScanResult {
   nodeResults: NodeScanResult[];
 }
 
-function addNodeResult(results: NodeScanResult[], visibleNode: VisibleTextNode, summary: ScanSummary): void {
-  if (summary.matches.length === 0) {
-    return;
-  }
-
-  results.push({
-    node: visibleNode.node,
-    text: visibleNode.text,
-    matches: summary.matches
-  });
-}
-
-export function scanPageText(keywords: string[]): PageScanResult {
+export function scanPageText(
+  keywords: string[],
+  options: Omit<ScanTextOptions, "keywords"> = {}
+): PageScanResult {
   const visibleNodes = collectVisibleTextNodes();
   const summaries: ScanSummary[] = [];
   const nodeResults: NodeScanResult[] = [];
 
   for (let i = 0; i < visibleNodes.length; i += 1) {
     const visibleNode = visibleNodes[i];
-    const summary = scanText(visibleNode.text, { keywords });
+    const summary = scanText(visibleNode.text, { ...options, keywords });
+
+    if (summary.matches.length > 0) {
+      nodeResults.push({
+        node: visibleNode.node,
+        text: visibleNode.text,
+        matches: summary.matches
+      });
+    }
+
     summaries.push(summary);
-    addNodeResult(nodeResults, visibleNode, summary);
   }
 
   return {

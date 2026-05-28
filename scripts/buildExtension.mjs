@@ -23,7 +23,6 @@ async function copyAsset(source, target) {
 
 async function ensureIcons() {
   const iconPath = resolve(projectRoot, "public/icons/icon-128.png");
-
   if (!(await exists(iconPath))) {
     await generateIcons();
   }
