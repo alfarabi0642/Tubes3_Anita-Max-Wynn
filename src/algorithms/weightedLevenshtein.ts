@@ -24,7 +24,13 @@ export interface WeightedDistanceResult {
   comparisons: number;
 }
 
-interface CandidateToken {
+interface CandidateSegment {
+  normalizedText: string;
+  start: number;
+  end: number;
+}
+
+interface TokenSpan {
   normalizedText: string;
   start: number;
   end: number;
@@ -115,9 +121,42 @@ export function calculateWeightedSimilarity(
   return Math.max(0, score);
 }
 
-function extractCandidateTokens(originalText: string): CandidateToken[] {
+function isWhitespace(char: string): boolean {
+  return char === " " || char === "\n" || char === "\r" || char === "\t" || char === "\f";
+}
+
+export function normalizeFuzzySegment(input: string): string {
+  const normalizedInput = normalizeCase(input);
+  let normalized = "";
+  let pendingSpace = false;
+  let hasContent = false;
+
+  for (let i = 0; i < normalizedInput.length; i += 1) {
+    const char = normalizedInput[i];
+
+    if (isWhitespace(char)) {
+      if (hasContent) {
+        pendingSpace = true;
+      }
+
+      continue;
+    }
+
+    if (pendingSpace) {
+      normalized += " ";
+      pendingSpace = false;
+    }
+
+    normalized += char;
+    hasContent = true;
+  }
+
+  return normalized;
+}
+
+function extractAlphanumericTokens(originalText: string): TokenSpan[] {
   const normalizedText = normalizeCase(originalText);
-  const candidates: CandidateToken[] = [];
+  const tokens: TokenSpan[] = [];
   let tokenStart = -1;
 
   for (let i = 0; i < normalizedText.length; i += 1) {
@@ -130,7 +169,7 @@ function extractCandidateTokens(originalText: string): CandidateToken[] {
     }
 
     if (tokenStart >= 0) {
-      candidates.push({
+      tokens.push({
         normalizedText: normalizedText.slice(tokenStart, i),
         start: tokenStart,
         end: i
@@ -140,11 +179,80 @@ function extractCandidateTokens(originalText: string): CandidateToken[] {
   }
 
   if (tokenStart >= 0) {
-    candidates.push({
+    tokens.push({
       normalizedText: normalizedText.slice(tokenStart, normalizedText.length),
       start: tokenStart,
       end: normalizedText.length
     });
+  }
+
+  return tokens;
+}
+
+function countKeywordTokens(normalizedKeyword: string): number {
+  let tokenCount = 0;
+  let insideToken = false;
+
+  for (let i = 0; i < normalizedKeyword.length; i += 1) {
+    if (isAsciiAlphaNumeric(normalizedKeyword[i])) {
+      if (!insideToken) {
+        tokenCount += 1;
+        insideToken = true;
+      }
+
+      continue;
+    }
+
+    insideToken = false;
+  }
+
+  return tokenCount;
+}
+
+function addCandidateSegment(
+  candidates: CandidateSegment[],
+  originalText: string,
+  start: number,
+  end: number
+): void {
+  candidates.push({
+    normalizedText: normalizeFuzzySegment(originalText.slice(start, end)),
+    start,
+    end
+  });
+}
+
+function extractCandidateSegments(originalText: string, normalizedKeyword: string): CandidateSegment[] {
+  const tokens = extractAlphanumericTokens(originalText);
+  const candidates: CandidateSegment[] = [];
+  const keywordTokenCount = countKeywordTokens(normalizedKeyword);
+
+  if (keywordTokenCount <= 1) {
+    for (let i = 0; i < tokens.length; i += 1) {
+      candidates.push(tokens[i]);
+    }
+
+    return candidates;
+  }
+
+  const minWindowSize = Math.max(1, keywordTokenCount - 1);
+  const maxWindowSize = keywordTokenCount + 1;
+
+  for (let startIndex = 0; startIndex < tokens.length; startIndex += 1) {
+    for (let windowSize = minWindowSize; windowSize <= maxWindowSize; windowSize += 1) {
+      const endIndex = startIndex + windowSize - 1;
+
+      if (endIndex >= tokens.length) {
+        continue;
+      }
+
+      addCandidateSegment(
+        candidates,
+        originalText,
+        tokens[startIndex].start,
+        tokens[endIndex].end
+      );
+    }
   }
 
   return candidates;
@@ -156,7 +264,7 @@ export function searchWeightedLevenshtein(
   threshold: number = DEFAULT_FUZZY_THRESHOLD,
   options: WeightedLevenshteinOptions = {}
 ): MatcherRunResult {
-  const normalizedKeyword = normalizeCase(keyword);
+  const normalizedKeyword = normalizeFuzzySegment(keyword);
   const matches: MatchResult[] = [];
   let comparisons = 0;
 
@@ -164,8 +272,8 @@ export function searchWeightedLevenshtein(
     return { matches, comparisons };
   }
 
-  const candidates = extractCandidateTokens(text);
-  const allowedLengthDelta = Math.max(1, Math.floor(normalizedKeyword.length * 0.2));
+  const candidates = extractCandidateSegments(text, normalizedKeyword);
+  const allowedLengthDelta = Math.max(1, Math.floor(normalizedKeyword.length * 0.25));
 
   for (let i = 0; i < candidates.length; i += 1) {
     const candidate = candidates[i];
