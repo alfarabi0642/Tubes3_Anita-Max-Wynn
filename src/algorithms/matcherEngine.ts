@@ -98,10 +98,31 @@ function addSetValues(target: Set<string>, source: Set<string>): void {
   }
 }
 
+function hasSameOccurrence(left: MatchResult, right: MatchResult): boolean {
+  return left.keyword === right.keyword && left.start === right.start && left.end === right.end;
+}
+
+function hasSameDetection(left: MatchResult, right: MatchResult): boolean {
+  return hasSameOccurrence(left, right) && left.algorithm === right.algorithm;
+}
+
 function countKeywordMatches(matches: MatchResult[]): Record<string, number> {
   const keywordCounts: Record<string, number> = {};
 
   for (let i = 0; i < matches.length; i += 1) {
+    let counted = false;
+
+    for (let j = 0; j < i; j += 1) {
+      if (hasSameOccurrence(matches[i], matches[j])) {
+        counted = true;
+        break;
+      }
+    }
+
+    if (counted) {
+      continue;
+    }
+
     const keyword = matches[i].keyword;
     keywordCounts[keyword] = (keywordCounts[keyword] ?? 0) + 1;
   }
@@ -109,8 +130,15 @@ function countKeywordMatches(matches: MatchResult[]): Record<string, number> {
   return keywordCounts;
 }
 
-function hasSameRange(left: MatchResult, right: MatchResult): boolean {
-  return left.start === right.start && left.end === right.end;
+function countTotalKeywordOccurrences(keywordCounts: Record<string, number>): number {
+  const keywords = Object.keys(keywordCounts);
+  let total = 0;
+
+  for (let i = 0; i < keywords.length; i += 1) {
+    total += keywordCounts[keywords[i]];
+  }
+
+  return total;
 }
 
 function deduplicateMatches(matches: MatchResult[]): MatchResult[] {
@@ -121,7 +149,7 @@ function deduplicateMatches(matches: MatchResult[]): MatchResult[] {
     let duplicateFound = false;
 
     for (let j = 0; j < uniqueMatches.length; j += 1) {
-      if (hasSameRange(candidate, uniqueMatches[j])) {
+      if (hasSameDetection(candidate, uniqueMatches[j])) {
         duplicateFound = true;
         break;
       }
@@ -137,7 +165,15 @@ function deduplicateMatches(matches: MatchResult[]): MatchResult[] {
       return left.start - right.start;
     }
 
-    return left.end - right.end;
+    if (left.end !== right.end) {
+      return left.end - right.end;
+    }
+
+    if (left.keyword !== right.keyword) {
+      return left.keyword.localeCompare(right.keyword);
+    }
+
+    return left.algorithm.localeCompare(right.algorithm);
   });
 
   return uniqueMatches;
@@ -245,10 +281,11 @@ export function scanText(text: string, options: ScanTextOptions = {}): ScanSumma
   }
 
   const matches = deduplicateMatches(rawMatches);
+  const keywordCounts = countKeywordMatches(matches);
 
   return {
-    totalMatches: matches.length,
-    keywordCounts: countKeywordMatches(matches),
+    totalMatches: countTotalKeywordOccurrences(keywordCounts),
+    keywordCounts,
     algorithmStats,
     scannedAt: Date.now(),
     matches
