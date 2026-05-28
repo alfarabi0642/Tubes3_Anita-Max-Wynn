@@ -1,7 +1,7 @@
 import type { MatchResult, MatcherRunResult } from "./types";
 import { normalizeCase } from "../shared/normalize";
 
-const KEYWORD_NUMBER_PATTERN = /(^|[^A-Za-z0-9])([A-Za-z]+[0-9]{2,3})(?![A-Za-z0-9])/g;
+const KEYWORD_NUMBER_PATTERN = /(^|[^A-Za-z0-9])([A-Za-z]+[0-9]{2,})(?![A-Za-z0-9])/g;
 
 export function searchRegexPatterns(text: string): MatcherRunResult {
   const matches: MatchResult[] = [];
