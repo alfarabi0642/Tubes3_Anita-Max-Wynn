@@ -16,7 +16,7 @@ function createEmptyMessage(message: string): HTMLParagraphElement {
   return empty;
 }
 
-function sortItemsByValue(items: ChartItem[]): ChartItem[] {
+export function sortItemsByValue(items: ChartItem[]): ChartItem[] {
   const sorted = items.slice();
 
   sorted.sort((left, right) => {
