@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Judol Detector</title>
+    <script type="module" crossorigin src="../../assets/popup.js"></script>
+    <link rel="stylesheet" crossorigin href="../../assets/popup.css">
+  </head>
+  <body>
+    <main class="popup-shell">
+      <header class="popup-header">
+        <div>
+          <p class="eyebrow">Judol Detector</p>
+          <h1>Realtime Scan</h1>
+        </div>
+        <button id="rescanButton" class="scan-button" type="button">SCAN</button>
+      </header>
+
+      <section class="summary-strip" aria-label="Scan summary">
+        <div>
+          <span>Total Matches</span>
+          <strong id="totalMatches">0</strong>
+        </div>
+        <div>
+          <span>Last Scan</span>
+          <strong id="lastScanned">-</strong>
+        </div>
+      </section>
+
+      <p id="pageTitle" class="page-title">Waiting for page scan...</p>
+      <p id="statusText" class="status-text" role="status">Loading active tab summary.</p>
+
+      <section class="panel" aria-labelledby="keywordHeading">
+        <h2 id="keywordHeading">Keyword Comparison</h2>
+        <div id="keywordChart" class="keyword-chart"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="algorithmHeading">
+        <h2 id="algorithmHeading">Algorithm Stats</h2>
+        <div id="algorithmList" class="algorithm-list"></div>
+      </section>
+    </main>
+
+  </body>
+</html>
