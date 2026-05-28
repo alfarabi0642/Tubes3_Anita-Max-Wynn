@@ -53,11 +53,26 @@ function appendTooltipRow(tooltip: HTMLElement, labelText: string, valueText: st
   tooltip.appendChild(row);
 }
 
-function setTooltipContent(tooltip: HTMLElement, match: MatchResult, summary: ScanSummary): void {
+function normalizeTooltipMatches(matches: MatchResult | MatchResult[]): MatchResult[] {
+  return Array.isArray(matches) ? matches : [matches];
+}
+
+export function formatTooltipDetection(match: MatchResult, summary: ScanSummary): string {
+  const occurrenceCount = getKeywordCount(summary, match.keyword);
+  const executionTime = getAlgorithmExecutionTime(summary, match.algorithm);
+  let value = `${match.keyword} | ${match.algorithm} | ${occurrenceCount}x | ${formatMs(executionTime)}`;
+
+  if (match.score !== undefined) {
+    value += ` | score ${match.score.toFixed(2)}`;
+  }
+
+  return value;
+}
+
+function setSingleTooltipContent(tooltip: HTMLElement, match: MatchResult, summary: ScanSummary): void {
   const occurrenceCount = getKeywordCount(summary, match.keyword);
   const executionTime = getAlgorithmExecutionTime(summary, match.algorithm);
 
-  clearElement(tooltip);
   appendTooltipRow(tooltip, "Keyword", match.keyword);
   appendTooltipRow(tooltip, "Algorithm", match.algorithm);
   appendTooltipRow(tooltip, "Occurrences", String(occurrenceCount));
@@ -68,10 +83,27 @@ function setTooltipContent(tooltip: HTMLElement, match: MatchResult, summary: Sc
   }
 }
 
-export function attachTooltip(element: HTMLElement, match: MatchResult, summary: ScanSummary): void {
+function setTooltipContent(tooltip: HTMLElement, matches: MatchResult | MatchResult[], summary: ScanSummary): void {
+  const normalizedMatches = normalizeTooltipMatches(matches);
+
+  clearElement(tooltip);
+
+  if (normalizedMatches.length === 1) {
+    setSingleTooltipContent(tooltip, normalizedMatches[0], summary);
+    return;
+  }
+
+  appendTooltipRow(tooltip, "Detections", String(normalizedMatches.length));
+
+  for (let i = 0; i < normalizedMatches.length; i += 1) {
+    appendTooltipRow(tooltip, `#${i + 1}`, formatTooltipDetection(normalizedMatches[i], summary));
+  }
+}
+
+export function attachTooltip(element: HTMLElement, matches: MatchResult | MatchResult[], summary: ScanSummary): void {
   element.addEventListener("mouseenter", (event) => {
     const tooltip = ensureTooltipElement();
-    setTooltipContent(tooltip, match, summary);
+    setTooltipContent(tooltip, matches, summary);
     tooltip.classList.add("judol-detector-tooltip--visible");
     positionTooltip(tooltip, event);
   });
