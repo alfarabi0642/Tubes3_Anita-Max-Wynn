@@ -44,6 +44,12 @@ export function areCharactersVisuallyEquivalent(left: string, right: string): bo
   return normalizeVisualCharacter(left) === normalizeVisualCharacter(right);
 }
 
+export function isVisualAlphaNumeric(char: string): boolean {
+  const normalizedChar = normalizeVisualCharacter(char);
+
+  return normalizedChar.length === 1 && isAsciiAlphaNumeric(normalizedChar);
+}
+
 export function isAsciiAlphaNumeric(char: string): boolean {
   if (char.length === 0) {
     return false;

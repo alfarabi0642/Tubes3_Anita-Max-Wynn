@@ -9,6 +9,7 @@ import {
 import {
   areCharactersVisuallyEquivalent,
   isAsciiAlphaNumeric,
+  isVisualAlphaNumeric,
   normalizeCase
 } from "../shared/normalize";
 
@@ -160,7 +161,7 @@ function extractAlphanumericTokens(originalText: string): TokenSpan[] {
   let tokenStart = -1;
 
   for (let i = 0; i < normalizedText.length; i += 1) {
-    if (isAsciiAlphaNumeric(normalizedText[i])) {
+    if (isVisualAlphaNumeric(normalizedText[i])) {
       if (tokenStart < 0) {
         tokenStart = i;
       }
@@ -194,7 +195,7 @@ function countKeywordTokens(normalizedKeyword: string): number {
   let insideToken = false;
 
   for (let i = 0; i < normalizedKeyword.length; i += 1) {
-    if (isAsciiAlphaNumeric(normalizedKeyword[i])) {
+    if (isVisualAlphaNumeric(normalizedKeyword[i])) {
       if (!insideToken) {
         tokenCount += 1;
         insideToken = true;

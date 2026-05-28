@@ -100,6 +100,16 @@ describe("scanText", () => {
     expect(result.keywordCounts.MAXWIN).toBe(1);
   });
 
+  it("finds fuzzy unicode visual substitutions inside one token", () => {
+    const result = scanText("Promo G\u03B1COR999 dan H\u039FKI88 aktif.", {
+      keywords: ["gacor999", "hoki88"],
+      activeAlgorithms: REQUIRED_ALGORITHMS
+    });
+
+    expect(result.keywordCounts.GACOR999).toBe(1);
+    expect(result.keywordCounts.HOKI88).toBe(1);
+  });
+
   it("finds fuzzy multi-word visual substitutions", () => {
     const result = scanText("Promo sl0t gacor sedang ramai.", {
       keywords: ["slot gacor"],

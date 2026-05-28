@@ -46,6 +46,10 @@
   function areCharactersVisuallyEquivalent(left, right) {
     return normalizeVisualCharacter(left) === normalizeVisualCharacter(right);
   }
+  function isVisualAlphaNumeric(char) {
+    const normalizedChar = normalizeVisualCharacter(char);
+    return normalizedChar.length === 1 && isAsciiAlphaNumeric(normalizedChar);
+  }
   function isAsciiAlphaNumeric(char) {
     if (char.length === 0) {
       return false;
@@ -359,7 +363,7 @@
     const tokens = [];
     let tokenStart = -1;
     for (let i = 0; i < normalizedText.length; i += 1) {
-      if (isAsciiAlphaNumeric(normalizedText[i])) {
+      if (isVisualAlphaNumeric(normalizedText[i])) {
         if (tokenStart < 0) {
           tokenStart = i;
         }
@@ -387,7 +391,7 @@
     let tokenCount = 0;
     let insideToken = false;
     for (let i = 0; i < normalizedKeyword.length; i += 1) {
-      if (isAsciiAlphaNumeric(normalizedKeyword[i])) {
+      if (isVisualAlphaNumeric(normalizedKeyword[i])) {
         if (!insideToken) {
           tokenCount += 1;
           insideToken = true;
