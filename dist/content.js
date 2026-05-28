@@ -254,7 +254,7 @@
     }
     return { matches, comparisons };
   }
-  const KEYWORD_NUMBER_PATTERN = /(^|[^A-Za-z0-9])([A-Za-z]+[0-9]{2,3})(?![A-Za-z0-9])/g;
+  const KEYWORD_NUMBER_PATTERN = /(^|[^A-Za-z0-9])([A-Za-z]+[0-9]{2,})(?![A-Za-z0-9])/g;
   function searchRegexPatterns(text) {
     const matches = [];
     let regexResult = KEYWORD_NUMBER_PATTERN.exec(text);
@@ -329,9 +329,34 @@
       comparisons
     };
   }
-  function extractCandidateTokens(originalText) {
+  function isWhitespace(char) {
+    return char === " " || char === "\n" || char === "\r" || char === "	" || char === "\f";
+  }
+  function normalizeFuzzySegment(input) {
+    const normalizedInput = normalizeCase(input);
+    let normalized = "";
+    let pendingSpace = false;
+    let hasContent = false;
+    for (let i = 0; i < normalizedInput.length; i += 1) {
+      const char = normalizedInput[i];
+      if (isWhitespace(char)) {
+        if (hasContent) {
+          pendingSpace = true;
+        }
+        continue;
+      }
+      if (pendingSpace) {
+        normalized += " ";
+        pendingSpace = false;
+      }
+      normalized += char;
+      hasContent = true;
+    }
+    return normalized;
+  }
+  function extractAlphanumericTokens(originalText) {
     const normalizedText = normalizeCase(originalText);
-    const candidates = [];
+    const tokens = [];
     let tokenStart = -1;
     for (let i = 0; i < normalizedText.length; i += 1) {
       if (isAsciiAlphaNumeric(normalizedText[i])) {
@@ -341,7 +366,7 @@
         continue;
       }
       if (tokenStart >= 0) {
-        candidates.push({
+        tokens.push({
           normalizedText: normalizedText.slice(tokenStart, i),
           start: tokenStart,
           end: i
@@ -350,23 +375,73 @@
       }
     }
     if (tokenStart >= 0) {
-      candidates.push({
+      tokens.push({
         normalizedText: normalizedText.slice(tokenStart, normalizedText.length),
         start: tokenStart,
         end: normalizedText.length
       });
     }
+    return tokens;
+  }
+  function countKeywordTokens(normalizedKeyword) {
+    let tokenCount = 0;
+    let insideToken = false;
+    for (let i = 0; i < normalizedKeyword.length; i += 1) {
+      if (isAsciiAlphaNumeric(normalizedKeyword[i])) {
+        if (!insideToken) {
+          tokenCount += 1;
+          insideToken = true;
+        }
+        continue;
+      }
+      insideToken = false;
+    }
+    return tokenCount;
+  }
+  function addCandidateSegment(candidates, originalText, start, end) {
+    candidates.push({
+      normalizedText: normalizeFuzzySegment(originalText.slice(start, end)),
+      start,
+      end
+    });
+  }
+  function extractCandidateSegments(originalText, normalizedKeyword) {
+    const tokens = extractAlphanumericTokens(originalText);
+    const candidates = [];
+    const keywordTokenCount = countKeywordTokens(normalizedKeyword);
+    if (keywordTokenCount <= 1) {
+      for (let i = 0; i < tokens.length; i += 1) {
+        candidates.push(tokens[i]);
+      }
+      return candidates;
+    }
+    const minWindowSize = Math.max(1, keywordTokenCount - 1);
+    const maxWindowSize = keywordTokenCount + 1;
+    for (let startIndex = 0; startIndex < tokens.length; startIndex += 1) {
+      for (let windowSize = minWindowSize; windowSize <= maxWindowSize; windowSize += 1) {
+        const endIndex = startIndex + windowSize - 1;
+        if (endIndex >= tokens.length) {
+          continue;
+        }
+        addCandidateSegment(
+          candidates,
+          originalText,
+          tokens[startIndex].start,
+          tokens[endIndex].end
+        );
+      }
+    }
     return candidates;
   }
   function searchWeightedLevenshtein(text, keyword, threshold = DEFAULT_FUZZY_THRESHOLD, options = {}) {
-    const normalizedKeyword = normalizeCase(keyword);
+    const normalizedKeyword = normalizeFuzzySegment(keyword);
     const matches = [];
     let comparisons = 0;
     if (normalizedKeyword.length === 0) {
       return { matches, comparisons };
     }
-    const candidates = extractCandidateTokens(text);
-    const allowedLengthDelta = Math.max(1, Math.floor(normalizedKeyword.length * 0.2));
+    const candidates = extractCandidateSegments(text, normalizedKeyword);
+    const allowedLengthDelta = Math.max(1, Math.floor(normalizedKeyword.length * 0.25));
     for (let i = 0; i < candidates.length; i += 1) {
       const candidate = candidates[i];
       const lengthDelta = Math.abs(candidate.normalizedText.length - normalizedKeyword.length);
@@ -618,16 +693,37 @@
       target.add(value);
     }
   }
+  function hasSameOccurrence(left, right) {
+    return left.keyword === right.keyword && left.start === right.start && left.end === right.end;
+  }
+  function hasSameDetection(left, right) {
+    return hasSameOccurrence(left, right) && left.algorithm === right.algorithm;
+  }
   function countKeywordMatches(matches) {
     const keywordCounts = {};
     for (let i = 0; i < matches.length; i += 1) {
+      let counted = false;
+      for (let j = 0; j < i; j += 1) {
+        if (hasSameOccurrence(matches[i], matches[j])) {
+          counted = true;
+          break;
+        }
+      }
+      if (counted) {
+        continue;
+      }
       const keyword = matches[i].keyword;
       keywordCounts[keyword] = (keywordCounts[keyword] ?? 0) + 1;
     }
     return keywordCounts;
   }
-  function hasSameRange(left, right) {
-    return left.start === right.start && left.end === right.end;
+  function countTotalKeywordOccurrences(keywordCounts) {
+    const keywords = Object.keys(keywordCounts);
+    let total = 0;
+    for (let i = 0; i < keywords.length; i += 1) {
+      total += keywordCounts[keywords[i]];
+    }
+    return total;
   }
   function deduplicateMatches(matches) {
     const uniqueMatches = [];
@@ -635,7 +731,7 @@
       const candidate = matches[i];
       let duplicateFound = false;
       for (let j = 0; j < uniqueMatches.length; j += 1) {
-        if (hasSameRange(candidate, uniqueMatches[j])) {
+        if (hasSameDetection(candidate, uniqueMatches[j])) {
           duplicateFound = true;
           break;
         }
@@ -648,7 +744,13 @@
       if (left.start !== right.start) {
         return left.start - right.start;
       }
-      return left.end - right.end;
+      if (left.end !== right.end) {
+        return left.end - right.end;
+      }
+      if (left.keyword !== right.keyword) {
+        return left.keyword.localeCompare(right.keyword);
+      }
+      return left.algorithm.localeCompare(right.algorithm);
     });
     return uniqueMatches;
   }
@@ -731,9 +833,10 @@
       }
     }
     const matches = deduplicateMatches(rawMatches);
+    const keywordCounts = countKeywordMatches(matches);
     return {
-      totalMatches: matches.length,
-      keywordCounts: countKeywordMatches(matches),
+      totalMatches: countTotalKeywordOccurrences(keywordCounts),
+      keywordCounts,
       algorithmStats,
       scannedAt: Date.now(),
       matches
@@ -813,6 +916,9 @@
     "TEMPLATE"
   ]);
   const EXTENSION_ATTRIBUTE$2 = "data-judol-extension";
+  function isSkippedTagName(tagName) {
+    return SKIPPED_TAGS.has(tagName.toUpperCase());
+  }
   function hasTextContent(node) {
     const text = node.nodeValue ?? "";
     for (let i = 0; i < text.length; i += 1) {
@@ -838,8 +944,7 @@
     if (htmlElement.hidden || element.getAttribute("aria-hidden") === "true") {
       return false;
     }
-    const tagName = element.tagName.toUpperCase();
-    if (SKIPPED_TAGS.has(tagName)) {
+    if (isSkippedTagName(element.tagName)) {
       return false;
     }
     const style = window.getComputedStyle(element);
@@ -958,10 +1063,21 @@
     row.appendChild(value);
     tooltip.appendChild(row);
   }
-  function setTooltipContent(tooltip, match, summary) {
+  function normalizeTooltipMatches(matches) {
+    return Array.isArray(matches) ? matches : [matches];
+  }
+  function formatTooltipDetection(match, summary) {
     const occurrenceCount = getKeywordCount(summary, match.keyword);
     const executionTime = getAlgorithmExecutionTime(summary, match.algorithm);
-    clearElement(tooltip);
+    let value = `${match.keyword} | ${match.algorithm} | ${occurrenceCount}x | ${formatMs(executionTime)}`;
+    if (match.score !== void 0) {
+      value += ` | score ${match.score.toFixed(2)}`;
+    }
+    return value;
+  }
+  function setSingleTooltipContent(tooltip, match, summary) {
+    const occurrenceCount = getKeywordCount(summary, match.keyword);
+    const executionTime = getAlgorithmExecutionTime(summary, match.algorithm);
     appendTooltipRow(tooltip, "Keyword", match.keyword);
     appendTooltipRow(tooltip, "Algorithm", match.algorithm);
     appendTooltipRow(tooltip, "Occurrences", String(occurrenceCount));
@@ -970,10 +1086,22 @@
       appendTooltipRow(tooltip, "Score", match.score.toFixed(2));
     }
   }
-  function attachTooltip(element, match, summary) {
+  function setTooltipContent(tooltip, matches, summary) {
+    const normalizedMatches = normalizeTooltipMatches(matches);
+    clearElement(tooltip);
+    if (normalizedMatches.length === 1) {
+      setSingleTooltipContent(tooltip, normalizedMatches[0], summary);
+      return;
+    }
+    appendTooltipRow(tooltip, "Detections", String(normalizedMatches.length));
+    for (let i = 0; i < normalizedMatches.length; i += 1) {
+      appendTooltipRow(tooltip, `#${i + 1}`, formatTooltipDetection(normalizedMatches[i], summary));
+    }
+  }
+  function attachTooltip(element, matches, summary) {
     element.addEventListener("mouseenter", (event) => {
       const tooltip = ensureTooltipElement();
-      setTooltipContent(tooltip, match, summary);
+      setTooltipContent(tooltip, matches, summary);
       tooltip.classList.add("judol-detector-tooltip--visible");
       positionTooltip(tooltip, event);
     });
@@ -993,39 +1121,83 @@
   }
   const HIGHLIGHT_SELECTOR = '[data-judol-highlight="true"]';
   const EXTENSION_ATTRIBUTE = "data-judol-extension";
+  function compareMatchesForHighlight(left, right) {
+    if (left.start !== right.start) {
+      return left.start - right.start;
+    }
+    if (left.end !== right.end) {
+      return right.end - left.end;
+    }
+    if (left.keyword !== right.keyword) {
+      return left.keyword.localeCompare(right.keyword);
+    }
+    return left.algorithm.localeCompare(right.algorithm);
+  }
   function sortMatchesForHighlight(matches) {
     const sorted = matches.slice();
-    sorted.sort((left, right) => {
-      if (left.start !== right.start) {
-        return left.start - right.start;
-      }
-      return right.end - left.end;
-    });
+    sorted.sort(compareMatchesForHighlight);
     return sorted;
   }
-  function selectNonOverlappingMatches(matches) {
+  function isValidMatch(match) {
+    return match.start >= 0 && match.start < match.end;
+  }
+  function createHighlightGroups(matches) {
     const sorted = sortMatchesForHighlight(matches);
-    const selected = [];
-    let lastEnd = 0;
+    const groups = [];
     for (let i = 0; i < sorted.length; i += 1) {
       const match = sorted[i];
-      if (match.start < lastEnd || match.start >= match.end) {
+      if (!isValidMatch(match)) {
         continue;
       }
-      selected.push(match);
-      lastEnd = match.end;
+      const currentGroup = groups[groups.length - 1];
+      if (currentGroup !== void 0 && match.start < currentGroup.end) {
+        currentGroup.matches.push(match);
+        if (match.end > currentGroup.end) {
+          currentGroup.end = match.end;
+        }
+        currentGroup.matches.sort(compareMatchesForHighlight);
+        continue;
+      }
+      groups.push({
+        start: match.start,
+        end: match.end,
+        matches: [match]
+      });
     }
-    return selected;
+    return groups;
   }
-  function createHighlightSpan(match, summary) {
+  function getPrimaryMatch(group) {
+    return group.matches[0];
+  }
+  function hasAlgorithm(matches, algorithm, limit) {
+    for (let i = 0; i < limit; i += 1) {
+      if (matches[i].algorithm === algorithm) {
+        return true;
+      }
+    }
+    return false;
+  }
+  function createAlgorithmLabel(matches) {
+    let label = "";
+    for (let i = 0; i < matches.length; i += 1) {
+      const algorithm = matches[i].algorithm;
+      if (hasAlgorithm(matches, algorithm, i)) {
+        continue;
+      }
+      label += label.length === 0 ? algorithm : `, ${algorithm}`;
+    }
+    return label;
+  }
+  function createHighlightSpan(group, originalText, summary) {
+    const primaryMatch = getPrimaryMatch(group);
     const span = document.createElement("span");
-    span.className = `judol-detector-highlight judol-detector-highlight--${match.algorithm.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+    span.className = `judol-detector-highlight judol-detector-highlight--${primaryMatch.algorithm.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
     span.setAttribute("data-judol-highlight", "true");
     span.setAttribute(EXTENSION_ATTRIBUTE, "true");
-    span.dataset.keyword = match.keyword;
-    span.dataset.algorithm = match.algorithm;
-    span.textContent = match.matchedText;
-    attachTooltip(span, match, summary);
+    span.dataset.keyword = primaryMatch.keyword;
+    span.dataset.algorithm = createAlgorithmLabel(group.matches);
+    span.textContent = originalText.slice(group.start, group.end);
+    attachTooltip(span, group.matches, summary);
     return span;
   }
   function applyHighlights(node, matches, summary) {
@@ -1033,20 +1205,20 @@
     if (parent === null || matches.length === 0) {
       return;
     }
-    const selectedMatches = selectNonOverlappingMatches(matches);
-    if (selectedMatches.length === 0) {
+    const highlightGroups = createHighlightGroups(matches);
+    if (highlightGroups.length === 0) {
       return;
     }
     const originalText = node.nodeValue ?? "";
     const fragment = document.createDocumentFragment();
     let cursor = 0;
-    for (let i = 0; i < selectedMatches.length; i += 1) {
-      const match = selectedMatches[i];
-      if (match.start > cursor) {
-        fragment.appendChild(document.createTextNode(originalText.slice(cursor, match.start)));
+    for (let i = 0; i < highlightGroups.length; i += 1) {
+      const group = highlightGroups[i];
+      if (group.start > cursor) {
+        fragment.appendChild(document.createTextNode(originalText.slice(cursor, group.start)));
       }
-      fragment.appendChild(createHighlightSpan(match, summary));
-      cursor = match.end;
+      fragment.appendChild(createHighlightSpan(group, originalText, summary));
+      cursor = group.end;
     }
     if (cursor < originalText.length) {
       fragment.appendChild(document.createTextNode(originalText.slice(cursor)));
