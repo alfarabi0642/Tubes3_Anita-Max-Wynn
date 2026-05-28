@@ -11,6 +11,10 @@ const SKIPPED_TAGS = new Set([
 
 const EXTENSION_ATTRIBUTE = "data-judol-extension";
 
+export function isSkippedTagName(tagName: string): boolean {
+  return SKIPPED_TAGS.has(tagName.toUpperCase());
+}
+
 function hasTextContent(node: Text): boolean {
   const text = node.nodeValue ?? "";
 
@@ -46,8 +50,7 @@ function isElementVisible(element: Element): boolean {
     return false;
   }
 
-  const tagName = element.tagName.toUpperCase();
-  if (SKIPPED_TAGS.has(tagName)) {
+  if (isSkippedTagName(element.tagName)) {
     return false;
   }
 
