@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Judol Detector</title>
+    <link rel="stylesheet" href="../styles/popup.css" />
+  </head>
+  <body>
+    <main class="popup-shell">
+      <header class="popup-header">
+        <div>
+          <p class="eyebrow">Judol Detector</p>
+          <h1>Realtime Scan</h1>
+        </div>
+        <button id="rescanButton" class="scan-button" type="button">SCAN</button>
+      </header>
+
+      <section class="summary-strip" aria-label="Scan summary">
+        <div>
+          <span>Total Matches</span>
+          <strong id="totalMatches">0</strong>
+        </div>
+        <div>
+          <span>Last Scan</span>
+          <strong id="lastScanned">-</strong>
+        </div>
+      </section>
+
+      <p id="pageTitle" class="page-title">Waiting for page scan...</p>
+      <p id="statusText" class="status-text" role="status">Loading active tab summary.</p>
+
+      <section class="panel" aria-labelledby="keywordHeading">
+        <h2 id="keywordHeading">Keyword Comparison</h2>
+        <div id="keywordChart" class="keyword-chart"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="algorithmHeading">
+        <h2 id="algorithmHeading">Algorithm Stats</h2>
+        <div id="algorithmList" class="algorithm-list"></div>
+      </section>
+
+      <section class="panel panel--blur" aria-labelledby="blurHeading">
+        <h2 id="blurHeading">Censorship</h2>
+        <div class="blur-row">
+          <div class="blur-description">
+            <strong>Blur Detected Content</strong>
+            <p>Automatically blurs page elements that contain gambling keywords.</p>
+          </div>
+          <label class="blur-toggle-wrap" aria-label="Toggle blur mode">
+            <input id="blurToggle" type="checkbox" class="blur-checkbox" />
+            <span class="blur-track">
+              <span class="blur-thumb"></span>
+            </span>
+          </label>
+        </div>
+        <span id="blurLabel" class="blur-status blur-status--off">Blur OFF</span>
+      </section>
+    </main>
+
+    <script type="module" src="./popup.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,20 @@
+{
+  "name": "judol-detector",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/buildExtension.mjs",
+    "icons": "node scripts/generateIcons.mjs",
+    "package": "node scripts/packageExtension.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --config vitest.config.mjs"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.1.42",
+    "@types/node": "^20.12.12",
+    "typescript": "^5.4.5",
+    "vite": "^5.2.11",
+    "vitest": "^1.6.0"
+  }
+}
