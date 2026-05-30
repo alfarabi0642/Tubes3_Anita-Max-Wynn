@@ -30,6 +30,22 @@ npm run build
 
 Hasil build extension berada di folder `dist/`.
 
+## Penjelasan Singkat Algoritma KMP dan Boyer-Moore
+
+Extension ini menggunakan KMP dan Boyer-Moore sebagai algoritma exact matching untuk mencari setiap keyword judi online di teks halaman. Sebelum pencarian, teks dan keyword dinormalisasi dengan `normalizeCase` agar pencocokan tidak bergantung pada kapitalisasi, sementara teks asli tetap dipakai untuk hasil highlight.
+
+### Knuth-Morris-Pratt (KMP)
+
+Implementasi KMP berada di `src/algorithms/kmp.ts`. Algoritma ini terlebih dahulu membangun failure table untuk keyword, yaitu tabel yang menyimpan panjang prefix yang juga suffix pada setiap posisi pola. Saat terjadi mismatch, pencarian tidak mundur ke awal keyword, tetapi langsung memindahkan posisi pattern berdasarkan failure table tersebut. Dengan cara ini, karakter teks yang sudah terbukti cocok tidak perlu dibandingkan ulang. Pada extension ini, KMP mengembalikan posisi awal dan akhir match, teks yang cocok, nama algoritma, serta jumlah perbandingan karakter.
+
+Kompleksitas preprocessing KMP adalah O(m), dengan m sebagai panjang keyword, dan proses pencarian adalah O(n), dengan n sebagai panjang teks.
+
+### Boyer-Moore (BM)
+
+Implementasi Boyer-Moore berada di `src/algorithms/boyerMoore.ts`. Varian yang digunakan adalah pendekatan bad-character heuristic. Algoritma membangun last occurrence table yang menyimpan posisi terakhir kemunculan setiap karakter pada keyword. Pencocokan dilakukan dari kanan ke kiri. Jika terjadi mismatch, keyword digeser berdasarkan posisi terakhir karakter yang gagal dicocokkan tersebut. Jika karakter mismatch tidak ada di keyword, pergeseran bisa melewati lebih banyak karakter teks.
+
+Preprocessing BM membutuhkan O(m). Pada banyak kasus, BM dapat lebih cepat dari pencarian kiri-ke-kanan karena mampu melompati beberapa karakter sekaligus. Implementasi bad-character sederhana ini tetap menghitung jumlah perbandingan karakter dan mencatat match dengan format hasil yang sama seperti KMP.
+
 ## Menjalankan di Chrome
 
 1. Buka `chrome://extensions/`.
@@ -64,5 +80,4 @@ npm run package
 ```
 
 Command tersebut membuat arsip `release/judol-detector-extension.zip` dari isi `dist/`.
-
 
